@@ -96,10 +96,16 @@ class _HeaderSection extends StatelessWidget {
 /// _ScrollItemView represents a single card in our list.
 class _ScrollItemView extends StatelessWidget {
   final int index;
-  final Color itemColor;
+  // final Color itemColor;
 
   // Constructor initializes the item index and its unique color.
-  _ScrollItemView({required this.index}) : itemColor = _generateColor(index);
+  // _ScrollItemView({required this.index}) : itemColor = _generateColor(index);
+
+  //above approach is good but it could be better
+  const _ScrollItemView({required this.index});
+
+  Color get itemColor => _generateColor(index);
+  //Avoid storing derived values → keeps widget pure.
 
   // Helper method to pick a color based on the item's position.
   static Color _generateColor(int index) {
