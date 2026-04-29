@@ -132,3 +132,32 @@ Do NOT use it when:
 . Items are self-separating: If your items already have their own margins or borders that handle the spacing, the separatorBuilder is redundant.
 
  */
+
+/// SingleChildScrollView (Scrolling)
+
+/*
+
+SingleChildScrollView is the go-to solution when you have a single block of content that might not fit on smaller screens.
+
+Think of it as a "scrollable wrapper." You use it when you have a fixed layout (like a form or a long article) that needs to be scrollable if the device screen is too short.
+
+SingleChildScrollView(
+  child: Column(
+    children: [
+      SizedBox(height: 300),
+    ],
+  ),
+)
+
+When to Use vs. When Not to Use
+
+Use it when:
+. Forms: Perfect for registration or login screens where the keyboard might pop up and cover your input fields, causing an "Overflow" error.
+. Static Pages: For "About Us" pages, settings screens, or long articles where the content is a fixed layout rather than a repeating list.
+. Small Content: When you have content that fits on a tablet but might need to scroll on a small phone.
+
+Do NOT use it when:
+. Infinite/Large Lists: Since it doesn't have a "builder" mechanism, it loads everything in its child widget immediately. If you put 100 items in a Column inside a SingleChildScrollView, you'll face the same performance lag as a basic ListView.
+. Dynamic Data Sets: If your data is coming from a list/array, ListView.builder is always the better choice for memory management.
+
+*/
