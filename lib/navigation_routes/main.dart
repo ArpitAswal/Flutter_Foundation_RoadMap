@@ -1,47 +1,62 @@
 import 'package:flutter/material.dart';
 import 'core/app_routes.dart';
 import 'core/app_router.dart';
+import 'core/app_go_router.dart'; // NEW: GoRouter Config
 
-/// Navigation System (Routes, Data Flow, Architecture)
+/// ===========================================================================
+/// NAVIGATION & ROUTING ROADMAP
+/// ===========================================================================
 /// 
-/// This module teaches how to build a scalable navigation system using:
-/// 1. Navigator 1.0 (Imperative Model)
-/// 2. Named Routes for Scalability
-/// 3. onGenerateRoute for dynamic routing and data passing
-/// 4. Decoupled Route Manager and Generator classes
-void main() => runApp(const NavigationApp());
+/// This module teaches how to build scalable navigation systems in Flutter.
+/// It covers both Navigator 1.0 (Imperative) and GoRouter (Declarative).
+/// 
+/// TO SWITCH DEMOS: 
+/// Toggle between 'NavigationApp()' and 'GoNavigationApp()' in the main() function.
 
+void main() => runApp(const GoNavigationApp()); // Currently using GoRouter
+
+// -----------------------------------------------------------------------------
+// 1. GOROUTER (DECLARATIVE - NAVIGATOR 2.0)
+// -----------------------------------------------------------------------------
+/// GoRouter is the recommended way for modern Flutter apps, especially for
+/// web support, deep linking, and complex nested routing.
+class GoNavigationApp extends StatelessWidget {
+  const GoNavigationApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'GoRouter Demo',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.orange,
+        useMaterial3: true,
+      ),
+      // Use routerConfig to hook into GoRouter
+      routerConfig: AppGoRouter.router,
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 2. NAVIGATOR 1.0 (IMPERATIVE - TRADITIONAL)
+// -----------------------------------------------------------------------------
+/// This is the traditional way of navigating in Flutter. 
+/// Good for simple apps or where deep linking is not a priority.
 class NavigationApp extends StatelessWidget {
   const NavigationApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Navigation Demo',
+      title: 'Navigator 1.0 Demo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      
-      // PRODUCTION BEST PRACTICE:
-      // Instead of the 'routes' map, we use 'onGenerateRoute'.
-      // This allows for better error handling and passing complex objects.
       initialRoute: AppRoutes.home,
       onGenerateRoute: AppRouter.generateRoute,
-      
-      /* 
-      Named Routes Comparison (Quick Reference):
-      
-      1. Basic (Not Scalable): 
-         Navigator.push(context, MaterialPageRoute(...));
-         
-      2. Named Map (Okay for small apps):
-         routes: { '/': (context) => HomeScreen() }
-         
-      3. onGenerateRoute (Scalable / Production Standard):
-         Handling everything in a separate Router class.
-      */
     );
   }
 }
