@@ -3,454 +3,206 @@
 > **Module path:** `lib/async_programming/`
 >
 > This module is a production-grade implementation of Dart's asynchronous execution model,
-> covering the three most critical real-world async patterns every Flutter engineer must master.
+> covering everything from the event loop basics to advanced isolate-based parallel processing.
 
 ---
 
 ## Table of Contents
 
-1. [Why Async Exists](#why-async-exists)
-2. [Dart's Execution Model](#darts-execution-model)
-3. [What is a Future?](#what-is-a-future)
-4. [async / await Deep Dive](#async--await-deep-dive)
-5. [Error Handling](#error-handling)
-6. [The `mounted` Check](#the-mounted-check)
-7. [FutureBuilder](#futurebuilder)
-8. [Streams](#streams)
-9. [StreamBuilder](#streambuilder)
-10. [Memory Leaks with Streams](#memory-leaks-with-streams)
-11. [Parallel Futures — `Future.wait`](#parallel-futures--futurewait)
-12. [Production Architecture](#production-architecture)
-13. [Module File Map](#module-file-map)
-14. [Assignments Implemented](#assignments-implemented)
+1. [Architecture: Production-Grade Layering](#architecture-production-grade-layering)
+2. [Dart's Execution Model & Event Loop](#darts-execution-model--event-loop)
+3. [Futures: One-Time Async Operations](#futures-one-time-async-operations)
+4. [async / await & Internal Workings](#async--await--internal-workings)
+5. [FutureBuilder: Deep Dive & Common Pitfalls](#futurebuilder-deep-dive--common-pitfalls)
+6. [Streams: Continuous Data Flow](#streams-continuous-data-flow)
+7. [StreamBuilder & Lifecycle Responsibility](#streambuilder--lifecycle-responsibility)
+8. [Broadcast Streams vs Single-Subscription](#broadcast-streams-vs-single-subscription)
+9. [Parallelism: Future.wait vs Records](#parallelism-futurewait-vs-records)
+10. [Advanced: Completer & StreamController](#advanced-completer--streamcontroller)
+11. [Isolates: True Parallel CPU Work](#isolates-true-parallel-cpu-work)
+12. [Zones & Global Error Handling](#zones--global-error-handling)
+13. [Common Mistakes & Performance Implications](#common-mistakes--performance-implications)
+14. [Advanced Interview Round (Q&A)](#advanced-interview-round-qa)
+15. [Module File Map](#module-file-map)
 
 ---
 
-## Why Async Exists
+## Architecture: Production-Grade Layering
 
-Mobile apps constantly perform tasks that take time. If these ran synchronously (blocking the UI thread), your app would freeze — a phenomenon Android calls **ANR (Application Not Responding)**.
+In production, async code must be separated into clear layers. Mixing network calls with UI code makes apps impossible to test and scale.
 
-| Task | Async? |
-|---|---|
-| API call | ✅ |
-| Database read | ✅ |
-| File access | ✅ |
-| Bluetooth | ✅ |
-| Firebase | ✅ |
-| Animations | ✅ |
+### ✅ Correct Separation (Implemented in this module)
+```
+UI (View) → ViewModel (State) → Repository → Data Source
+```
 
-Async allows these operations to run **without blocking the UI thread**, keeping your app at 60fps while data loads in the background.
+1. **View (UI)**: Consumes state via `FutureBuilder`/`StreamBuilder`.
+2. **ViewModel**: Orchestrates jobs, handles `dispose()`, and holds stable Future/Stream references.
+3. **Repository**: Orchestrates multiple data sources (e.g., Cache + Network) and transforms DTOs to Domain Models.
+4. **Data Source**: Lowest level. Only knows how to fetch raw data (e.g., Dio, Firebase, Hive).
 
 ---
 
-## Dart's Execution Model
+## Dart's Execution Model & Event Loop
 
-Dart is **single-threaded + event loop based**. There is only ONE thread for your Dart code. This is different from Java/Android which use multiple threads. Instead of threads, Dart uses an event loop to handle async work efficiently.
-
-### Core Components
-
-```
-┌──────────────┐    ┌───────────────────┐    ┌─────────────────┐
-│  Call Stack  │    │  Microtask Queue  │    │   Event Queue   │
-│              │    │                   │    │                 │
-│ main()       │ ←─ │  Future.microtask │ ←─ │  Future(...)    │
-│ function()   │    │  scheduleMicrotask│    │  Timer          │
-│ ...          │    │                   │    │  I/O callbacks  │
-└──────────────┘    └───────────────────┘    └─────────────────┘
-```
+Dart is **single-threaded**. It manages concurrency via an **Event Loop** architecture.
 
 ### Execution Order — CRITICAL
+1. **Synchronous Call Stack**: Everything in your `main()` runs first.
+2. **Microtask Queue**: High-priority tasks (e.g., `Future.microtask`). These run **before** the event queue.
+3. **Event Queue**: Standard async tasks (e.g., `Future`, `Timer`, I/O, User input).
 
-```dart
-void main() {
-  print("A");                              // 1. Sync
-  Future(() => print("B"));               // 3. Event Queue (last)
-  Future.microtask(() => print("C"));     // 2. Microtask Queue (before event queue)
-  print("D");                             // 1. Sync
-}
-```
-
-**Output:**
-```
-A
-D
-C
-B
-```
-
-**Why?**
-
-1. Synchronous code runs first (A, D)
-2. Microtask queue drains next (C)
-3. Event queue runs last (B)
-
-> **🧠 KEY RULE:** Microtask Queue > Event Queue. Always.
+> **⚠️ WARNING:** Overloading the Microtask queue can "starve" the Event queue, making your UI unresponsive to touch events.
 
 ---
 
-## What is a Future?
+## Futures: One-Time Async Operations
 
-A `Future<T>` represents **a value that will exist later**. Think of it as a "promise" — you don't have the value right now, but you'll receive it (or an error) at some point.
-
-### States of a Future
-
-```
-┌─────────────┐
-│ Uncompleted │  ← Future is running, no value yet
-└──────┬──────┘
-       │
-  ┌────┴────┐
-  │         │
-  ▼         ▼
-┌──────┐  ┌────────┐
-│ with │  │ with   │
-│ value│  │ error  │
-└──────┘  └────────┘
-```
+A `Future<T>` represents a value that will exist later. It handles tasks like:
+- `authRepository.login()` (Network)
+- `hiveBox.put(...)` (Disk I/O)
+- `FirebaseAuth.instance.signIn` (Auth delay)
 
 ---
 
-## async / await Deep Dive
+## async / await & Internal Workings
 
-```dart
-Future<String> fetchUser() async {
-  await Future.delayed(const Duration(seconds: 2));
-  return "UserName";
-}
-```
+When you hit `await`, Dart does **NOT** block the thread or create a new thread.
 
-### What `await` REALLY Does
-
-`await` does **NOT** block the thread. Instead:
-
-1. **Pauses** the current function at the `await` keyword
-2. **Returns control** to the event loop (UI stays responsive)
-3. **Resumes** the function when the Future completes
-
-```
-Main starts
-↓
-fetchUser() called
-↓
-Hit `await` → function paused, control returns to event loop
-↓
-[UI frames render, touch events process — 60fps maintained]
-↓
-Future completes → function resumes from where it paused
-↓
-Return value available
-```
-
-### Internal Future Lifecycle
-
-```dart
-Future<void> loadData() async {
-  print("Start");       // 1. Runs immediately
-  final data = await fetchData();  // 2. Pauses here
-  print(data);          // 3. Runs after future completes
-}
-```
+### Internally:
+1. The current function is **paused**.
+2. Control is **returned to the event loop** immediately (UI stays responsive).
+3. The Future completion callback is **queued** in the Event Loop.
+4. The function **resumes** once the event loop reaches that callback.
 
 ---
 
-## Error Handling
+## FutureBuilder: Deep Dive & Common Pitfalls
 
-### ❌ BAD — Silent crash
+### 🔍 Why caching the Future is MANDATORY
+`FutureBuilder` stores the **Future reference**, not the **Future result**.
 
+**❌ The Mistake:**
 ```dart
-await apiCall();  // If this throws, the exception propagates unhandled
-```
-
-### ✅ GOOD — Production pattern
-
-```dart
-try {
-  final result = await apiCall();
-  // Use result
-} catch (e, stackTrace) {
-  // e = the exception object
-  // stackTrace = where in the code it happened
-  debugPrint('Error: $e');
-  debugPrint('Stack: $stackTrace');
-  // Show user-friendly error message
-}
-```
-
-**Why is async error handling harder?**
-
-- Async errors can occur AFTER a widget has been disposed
-- They surface on a different execution frame than where they were triggered
-- Unhandled Future errors fail silently in release builds
-
----
-
-## The `mounted` Check
-
-This is one of the most common bugs in Flutter applications.
-
-### ❌ DANGEROUS — State set after widget disposed
-
-```dart
-await apiCall();
-setState(() {});  // Widget may already be removed from tree!
-```
-
-### ✅ CORRECT — Always check `mounted`
-
-```dart
-await apiCall();
-
-// mounted is a property of State that returns false
-// if the widget has been removed from the widget tree
-if (!mounted) return;
-
-setState(() {});
-```
-
-**Why does this happen?**
-
-When a user navigates away while an API call is in flight, the widget gets disposed. But the async callback still runs and tries to call `setState()` on a disposed widget → exception.
-
----
-
-## FutureBuilder
-
-`FutureBuilder` rebuilds your widget automatically based on the state of a `Future`.
-
-### Full Pattern
-
-```dart
-FutureBuilder<String>(
-  future: _myFuture, // must be stored in state, NOT created in build()
-  builder: (context, snapshot) {
-    // snapshot.connectionState tells you the phase
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return const CircularProgressIndicator();
-    }
-
-    if (snapshot.hasError) {
-      return Text('Error: ${snapshot.error}');
-    }
-
-    return Text(snapshot.data ?? '');
-  },
-)
-```
-
-### 🔥 CRITICAL Production Warning
-
-```dart
-// ❌ NEVER DO THIS — creates a NEW future on every rebuild
 FutureBuilder(
-  future: apiCall(), // apiCall() is called again on every rebuild!
-)
-
-// ✅ CORRECT — future is created ONCE
-late Future<String> _future;
-
-@override
-void initState() {
-  super.initState();
-  _future = apiCall(); // created once, reused on every rebuild
-}
-
-// In build():
-FutureBuilder(
-  future: _future, // stable reference
+  future: apiCall(), // 😱 New future + New network request on EVERY rebuild!
 )
 ```
-
-**Why?** Flutter frequently rebuilds widgets. If you call `apiCall()` inside `build()`, every rebuild triggers a new network request → infinite loop → performance disaster.
-
-In this module, we solve this in the ViewModel: `FutureDemoViewModel` creates the future once in its constructor.
+**✅ The Solution:**
+Cache the Future in `initState()` or a ViewModel to maintain a stable reference across rebuilds.
 
 ---
 
-## Streams
+## Streams: Continuous Data Flow
 
-A `Stream<T>` emits **multiple values over time** — perfect for real-time data.
+Use Streams for data that arrives multiple times over time:
+- Chat systems / Live events
+- Firebase realtime updates
+- GPS tracking / Sensors
+- WebSockets
 
-| Feature | Future | Stream |
+### StreamController
+While `async*` is great for simple generators, `StreamController` is used to create streams manually (e.g., in a Chat Service).
+
+---
+
+## Broadcast Streams vs Single-Subscription
+
+| Type | Subscription Limit | Use Case |
 |---|---|---|
-| Emits | Once | Multiple times |
-| Use case | API call | Real-time updates |
-| Completion | After one value | After many values (or never) |
+| **Single-Subscription** | One listener only | File reading, HTTP body |
+| **Broadcast** | Multiple simultaneous listeners | Auth state, Chat events |
 
-### Real-World Stream Examples
+> **⚠️ Broadcast Tradeoff:** Broadcast streams do **NOT** buffer missed events. Late listeners miss all data emitted before they subscribed.
 
-| System | Stream |
-|---|---|
-| Firebase Realtime Database | ✅ |
-| Chat messages | ✅ |
-| GPS location | ✅ |
-| WebSocket | ✅ |
-| Sensors (accelerometer) | ✅ |
+---
 
-### Creating a Stream with `async*`
+## Parallelism: Future.wait vs Records
+
+When tasks are independent, run them in parallel to save time.
+
+### Traditional: `Future.wait`
+```dart
+final results = await Future.wait([fetchA(), fetchB()]);
+final a = results[0] as TypeA; // Manual casting required
+```
+
+### Modern (Dart 3.0+): Records `.wait`
+```dart
+final (a, b) = await (fetchA(), fetchB()).wait; // Type-safe and cleaner!
+```
+Total time = `max(latency_A, latency_B)` instead of `latency_A + latency_B`.
+
+---
+
+## Advanced: Completer & StreamController
+
+### 🏁 Completer
+A `Completer` allows you to manually complete a Future from an external event.
+- **Use Case**: Waiting for a WebSocket handshake or bridging older callback-based APIs to Futures.
+
+### 🕹️ StreamController
+The standard way to produce streams manually. Always `close()` your controllers in `dispose()` to prevent memory leaks.
+
+---
+
+## Isolates: True Parallel CPU Work
+
+Dart logic normally runs on a single **UI Isolate**. Heavy CPU tasks (large JSON parsing, image processing) block this isolate and cause **UI jank**.
+
+### ✅ The Solution: `compute()`
+Moves the heavy task to a **Worker Isolate**.
+```dart
+final result = await compute(heavyTask, data);
+```
+**Use Isolate for:** Large JSON parsing, Image compression, Encryption, AI processing.
+
+---
+
+## Zones & Global Error Handling
+
+`Zones` allow you to wrap your app in an environment for global error handling.
 
 ```dart
-Stream<int> counterStream() async* {
-  // async* marks this as an "asynchronous generator"
-  for (int i = 1; i <= 5; i++) {
-    await Future.delayed(const Duration(seconds: 1));
-    yield i; // 'yield' pushes a value into the stream
-  }
-  // After the loop ends, the stream is DONE
-}
+runZonedGuarded(() {
+  runApp(MyApp());
+}, (error, stack) {
+  FirebaseCrashlytics.instance.recordError(error, stack);
+});
 ```
 
 ---
 
-## StreamBuilder
+## Common Mistakes & Performance Implications
 
-`StreamBuilder` is to Streams what `FutureBuilder` is to Futures — it rebuilds the widget on every new stream value.
-
-```dart
-StreamBuilder<int>(
-  stream: counterStream(),
-  builder: (context, snapshot) {
-    // ConnectionState lifecycle:
-    // none → waiting → active → active → active → done
-
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return const CircularProgressIndicator();
-    }
-
-    if (snapshot.connectionState == ConnectionState.done) {
-      return const Text('Stream completed!');
-    }
-
-    return Text('Count: ${snapshot.data}');
-  },
-)
-```
-
-### Single Subscription vs Broadcast
-
-```dart
-// Single Subscription (default):
-// - Only ONE listener allowed
-// - Throws StateError if a second listener subscribes
-Stream<int> single = counterStream();
-
-// Broadcast:
-// - Multiple listeners allowed
-// - Each listener receives all future events
-Stream<int> broadcast = counterStream().asBroadcastStream();
-```
+1. **Calling Future in `build()`**: Triggers duplicate requests on every theme change or keyboard toggle.
+2. **Missing `mounted` check**: Calling `setState` after an `await` on a disposed widget causes crashes.
+3. **Sequential Independent APIs**: Fetching user info, then posts, then settings one by one instead of using parallel `.wait`.
+4. **Blocking the UI thread**: Running complex math or JSON parsing on the main isolate.
 
 ---
 
-## Memory Leaks with Streams
+## Advanced Interview Round (Q&A)
 
-This is the #1 cause of memory leaks in Flutter apps.
+### 🧠 Q1 — FutureBuilder Architecture
+**Interviewer:** Why is creating Future directly inside build dangerous?
+**Answer:** Because build can execute multiple times (rebuilds, theme changes, etc). If recreated, you start new async tasks and network requests on every frame, causing inconsistent state and wasted resources.
 
-### ❌ DANGEROUS — Subscription never cancelled
+### 🧠 Q2 — Stream Architecture
+**Interviewer:** Why would you convert a stream to broadcast?
+**Answer:** If multiple consumers (UI, Analytics, State) need the same data stream. Note: Broadcast streams don't replay old events.
 
-```dart
-class MyWidget extends StatefulWidget { ... }
+### 🧠 Q3 — Async Performance
+**Interviewer:** Why does Future.wait improve performance?
+**Answer:** It starts independent tasks concurrently. Total wait time drops from A+B to max(A,B).
 
-class _MyWidgetState extends State<MyWidget> {
-  @override
-  void initState() {
-    super.initState();
-    stream.listen((value) {
-      setState(() { _data = value; });
-    });
-    // No reference kept → can NEVER cancel!
-    // Stream callbacks fire even after widget is disposed
-  }
-}
-```
+### 🧠 Q4 — Production Streams
+**Interviewer:** Why must StreamSubscription be cancelled?
+**Answer:** To prevent memory leaks and "state-after-dispose" exceptions. Active subscriptions keep references alive even after a screen is gone.
 
-### ✅ CORRECT — Cancel in dispose()
-
-```dart
-class _MyWidgetState extends State<MyWidget> {
-  late StreamSubscription<int> _subscription; // Store the handle
-
-  @override
-  void initState() {
-    super.initState();
-    _subscription = stream.listen((value) {
-      setState(() { _data = value; });
-    });
-  }
-
-  @override
-  void dispose() {
-    _subscription.cancel(); // Cancel before freeing memory
-    super.dispose();
-  }
-}
-```
-
-In this module, the `StreamDemoViewModel` owns the `StreamSubscription` and cancels it in `dispose()`. The `StreamCounterScreen` calls `_viewModel.dispose()` in its own `dispose()`, completing the chain safely.
-
----
-
-## Parallel Futures — `Future.wait`
-
-### Sequential (slow)
-
-```dart
-// B cannot start until A finishes
-final user  = await fetchUser();   // 1.5 seconds
-final posts = await fetchPosts();  // 2.0 seconds
-// Total: 3.5 seconds
-```
-
-### Parallel (fast)
-
-```dart
-// Both start simultaneously
-final results = await Future.wait([
-  fetchUser(),   // starts at t=0
-  fetchPosts(),  // ALSO starts at t=0
-]);
-// Total: 2.0 seconds (max of both, not sum)
-final user  = results[0] as AppUser;
-final posts = results[1] as List<PostSummary>;
-```
-
-### When to use each
-
-| Pattern | Use When |
-|---|---|
-| Sequential | Operation B needs A's result |
-| Parallel | Operations are completely independent |
-
-> **⚠️ Warning:** If ANY future in `Future.wait()` fails, the entire wait fails immediately. Use `eagerError: false` or individual try/catch blocks if you want partial results on failure.
-
----
-
-## Production Architecture
-
-Async code belongs in the **repository** and **ViewModel** layers — NEVER in widgets.
-
-```
-┌─────────────────────────────────────────────┐
-│  UI Layer (Views)                           │
-│  • FutureBuilder / StreamBuilder            │
-│  • Shows loading / error / data states      │
-│  • Dispatches user actions to ViewModel     │
-└────────────────────┬────────────────────────┘
-                     │ reads state, calls methods
-┌────────────────────▼────────────────────────┐
-│  ViewModel (ChangeNotifier)                 │
-│  • Owns Future/Stream references            │
-│  • Manages StreamSubscription lifecycle     │
-│  • Calls repository, maps results to state  │
-│  • notifyListeners() to update UI           │
-└────────────────────┬────────────────────────┘
-                     │ calls service methods
-┌────────────────────▼────────────────────────┐
-│  Repository / Service                       │
-│  • Makes actual API calls / DB queries      │
-│  • Returns Future<T> or Stream<T>           │
-│  • Has NO knowledge of Flutter or UI        │
-└─────────────────────────────────────────────┘
-```
+### 🧠 Q5 — Isolates Scenario
+**Interviewer:** Your app freezes while parsing a 20MB JSON file. Why?
+**Answer:** Large CPU tasks block the single-threaded Event Loop. Frame rendering stops. The fix is moving the task to a worker isolate via `compute()`.
 
 ---
 
@@ -458,66 +210,11 @@ Async code belongs in the **repository** and **ViewModel** layers — NEVER in w
 
 ```
 lib/async_programming/
-│
-├── main.dart                                   ← Module entry point
-│
 ├── core/
-│   ├── models/
-│   │   └── user_post.dart                     ← Data models (UserPost, AppUser, etc.)
-│   └── services/
-│       └── mock_api_service.dart              ← Simulated API + Stream source
-│
+│   ├── data_sources/       ← Raw Data Fetching
+│   ├── repositories/       ← Business logic & orchestration
+│   └── services/           ← Isolate & CPU tasks
 └── presentation/
-    ├── viewmodels/
-    │   ├── future_demo_viewmodel.dart         ← Task 1 business logic
-    │   ├── stream_demo_viewmodel.dart         ← Task 2 business logic
-    │   └── parallel_demo_viewmodel.dart       ← Task 3 business logic
-    └── views/
-        ├── async_home_screen.dart             ← Module navigation hub
-        ├── future_builder_screen.dart         ← Task 1: FutureBuilder
-        ├── stream_counter_screen.dart         ← Task 2: StreamBuilder
-        └── parallel_async_screen.dart         ← Task 3: Future.wait
+    ├── viewmodels/         ← State & Lifecycle (dispose)
+    └── views/              ← UI Consumers
 ```
-
----
-
-## Assignments Implemented
-
-### Task 1 — FutureBuilder Screen (`future_builder_screen.dart`)
-
-**Requirements:** loading ✅ | success ✅ | error ✅ | retry button ✅
-
-Key patterns demonstrated:
-- Future created once in ViewModel constructor (not in `build()`)
-- `FutureBuilder` consuming the stable future reference
-- `ConnectionState.waiting` → loading indicator
-- `snapshot.hasError` → error card with retry button
-- Retry replaces the future reference → `FutureBuilder` restarts cleanly
-- Error simulation toggle via AppBar switch
-
-### Task 2 — Live Counter Stream (`stream_counter_screen.dart`)
-
-**Requirements:** StreamBuilder ✅ | start/stop ✅ | proper disposal ✅
-
-Key patterns demonstrated:
-- `Stream<int>` created with `async*` / `yield`
-- Single-subscription → broadcast conversion with `.asBroadcastStream()`
-- `StreamSubscription` owned by ViewModel, cancelled in `dispose()`
-- `StreamBuilder` reacts to each emitted value
-- `ConnectionState.none → waiting → active → done` lifecycle visible in UI
-- Animated counter with `ScaleTransition` pulse on each tick
-
-### Task 3 — Sequential vs Parallel (`parallel_async_screen.dart`)
-
-**Requirements:** demonstrate sequential async ✅ | parallel async ✅ | time measurement ✅
-
-Key patterns demonstrated:
-- Sequential: `await A; await B;` → total time = A + B (~3.5s)
-- Parallel: `await Future.wait([A, B])` → total time = max(A, B) (~2.0s)
-- `Stopwatch` measuring real wall-clock time
-- Side-by-side result panels showing measured time
-- Savings banner showing exact ms difference and percentage improvement
-- Code comparison card with annotated snippets
-- Usage guide explaining when to use each pattern
-
-

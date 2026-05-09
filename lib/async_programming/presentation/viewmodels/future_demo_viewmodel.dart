@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/models/user_post.dart';
-import '../../core/services/mock_api_service.dart';
+import '../../core/repositories/post_repository.dart';
 
 // =============================================================================
 // 🧠 FutureDemoViewModel — Business Logic for FutureBuilder Screen
@@ -41,26 +41,14 @@ class FutureDemoViewModel extends ChangeNotifier {
   // 📦 Dependencies
   // ---------------------------------------------------------------------------
 
-  /// The service that simulates the real API boundary.
-  /// In production, this would be injected via get_it or a constructor parameter.
-  final MockApiService _apiService;
+  final IPostRepository _repository;
 
   // ---------------------------------------------------------------------------
   // 🔄 State
   // ---------------------------------------------------------------------------
 
-  /// The primary Future that drives the FutureBuilder in the View.
-  ///
-  /// WHY `late`?
-  ///   We initialize this in the constructor body. `late` tells Dart the field
-  ///   will be assigned before it's first read, avoiding the nullable `?` type.
-  ///   This keeps the type as `Future<UserPost>` (not `Future<UserPost>?`),
-  ///   making consumption in the View simpler.
   late Future<UserPost> userPostFuture;
 
-  /// Whether the next API call should simulate a server error.
-  ///
-  /// The View exposes a toggle to flip this, demonstrating error handling.
   bool _simulateError = false;
   bool get simulateError => _simulateError;
 
@@ -68,10 +56,8 @@ class FutureDemoViewModel extends ChangeNotifier {
   // 🔨 Constructor
   // ---------------------------------------------------------------------------
 
-  FutureDemoViewModel({MockApiService? apiService})
-      : _apiService = apiService ?? MockApiService() {
-    // Initialize the future immediately so the screen starts loading on mount.
-    // This is the equivalent of calling an API in initState() of a StatefulWidget.
+  FutureDemoViewModel({IPostRepository? repository})
+      : _repository = repository ?? PostRepository() {
     _loadUserPost();
   }
 
@@ -79,15 +65,8 @@ class FutureDemoViewModel extends ChangeNotifier {
   // ⚙️ Private Methods
   // ---------------------------------------------------------------------------
 
-  /// Creates a fresh [Future<UserPost>] from the service and stores it.
-  ///
-  /// By assigning a new Future reference, FutureBuilder will detect the change
-  /// on the next rebuild (triggered by notifyListeners) and restart.
   void _loadUserPost() {
-    // Sync the error flag with the service before every call
-    _apiService.shouldSimulateError = _simulateError;
-    // Assign the new future — the View's FutureBuilder will pick this up
-    userPostFuture = _apiService.fetchUserPost();
+    userPostFuture = _repository.getUserPost(simulateError: _simulateError);
   }
 
   // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/models/user_post.dart';
-import '../../core/services/mock_api_service.dart';
+import '../../core/repositories/post_repository.dart';
 
 // =============================================================================
 // 🧠 ParallelDemoViewModel — Business Logic for Parallel vs Sequential Demo
@@ -54,33 +54,24 @@ class ParallelDemoViewModel extends ChangeNotifier {
   // 📦 Dependencies
   // ---------------------------------------------------------------------------
 
-  final MockApiService _apiService;
+  final IPostRepository _repository;
 
   // ---------------------------------------------------------------------------
   // 🔄 State
   // ---------------------------------------------------------------------------
 
-  /// Result from the last sequential run. Null before first run.
   FetchResult? sequentialResult;
-
-  /// Result from the last parallel run. Null before first run.
   FetchResult? parallelResult;
-
-  /// True while a sequential fetch is in progress.
   bool isSequentialRunning = false;
-
-  /// True while a parallel fetch is in progress.
   bool isParallelRunning = false;
-
-  /// Last error encountered in either run, for UI display.
   String? errorMessage;
 
   // ---------------------------------------------------------------------------
   // 🔨 Constructor
   // ---------------------------------------------------------------------------
 
-  ParallelDemoViewModel({MockApiService? apiService})
-      : _apiService = apiService ?? MockApiService();
+  ParallelDemoViewModel({IPostRepository? repository})
+      : _repository = repository ?? PostRepository();
 
   // ---------------------------------------------------------------------------
   // 🎮 Public Actions (called by the View)
@@ -101,37 +92,24 @@ class ParallelDemoViewModel extends ChangeNotifier {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // 🔴 SEQUENTIAL: Each await suspends this function until the future resolves.
-      // fetchPosts does NOT start until fetchUser has FULLY COMPLETED.
-      debugPrint('[ParallelDemo] Sequential — fetchUser starting...');
-      final user = await _apiService.fetchUser();
-
-      debugPrint('[ParallelDemo] Sequential — fetchPosts starting...');
-      final posts = await _apiService.fetchPosts();
+      // 🔴 SEQUENTIAL: We await each future one by one.
+      final user = await _repository.fetchUser();
+      final posts = await _repository.fetchPosts();
 
       stopwatch.stop();
-      debugPrint('[ParallelDemo] Sequential — done in ${stopwatch.elapsed}');
 
       sequentialResult = FetchResult(
         data: UserWithPosts(user: user, posts: posts),
         elapsed: stopwatch.elapsed,
       );
-    } catch (e, stackTrace) {
-      // Always handle async errors. Unhandled Future errors crash apps silently.
-      debugPrint('[ParallelDemo] Sequential error: $e\n$stackTrace');
+    } catch (e) {
       errorMessage = 'Sequential fetch failed: $e';
     } finally {
-      // finally blocks run regardless of success or failure — perfect for cleanup
       isSequentialRunning = false;
       notifyListeners();
     }
   }
 
-  /// Fetches user and posts simultaneously (parallel).
-  ///
-  /// Future.wait() starts ALL futures immediately and waits for ALL to finish.
-  ///
-  /// Total time ≈ max(latency(fetchUser), latency(fetchPosts)) = ~2.0 seconds
   Future<void> runParallel() async {
     isParallelRunning = true;
     parallelResult = null;
@@ -141,33 +119,16 @@ class ParallelDemoViewModel extends ChangeNotifier {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // 🟢 PARALLEL: Both futures are created (and thus started) immediately.
-      // They run concurrently at the I/O level. Future.wait suspends until
-      // the LAST one completes. The result list preserves insertion order.
-      debugPrint('[ParallelDemo] Parallel — both fetches starting simultaneously...');
-
-      final results = await Future.wait([
-        _apiService.fetchUser(),   // starts at t=0
-        _apiService.fetchPosts(),  // also starts at t=0
-      ]);
+      // 🟢 PARALLEL: We use the repository method that uses Records .wait
+      final resultData = await _repository.getUserAndPosts();
 
       stopwatch.stop();
-      debugPrint('[ParallelDemo] Parallel — done in ${stopwatch.elapsed}');
-
-      // results[0] corresponds to fetchUser(), results[1] to fetchPosts()
-      // We need to cast because Future.wait returns List<Object?> for mixed types.
-      final user = results[0] as AppUser;
-      final posts = results[1] as List<PostSummary>;
 
       parallelResult = FetchResult(
-        data: UserWithPosts(user: user, posts: posts),
+        data: resultData,
         elapsed: stopwatch.elapsed,
       );
-    } catch (e, stackTrace) {
-      // IMPORTANT: If ANY future in Future.wait fails, the entire wait fails.
-      // Use Future.wait with eagerError:false or individual try/catches if
-      // you want partial results on failure.
-      debugPrint('[ParallelDemo] Parallel error: $e\n$stackTrace');
+    } catch (e) {
       errorMessage = 'Parallel fetch failed: $e';
     } finally {
       isParallelRunning = false;

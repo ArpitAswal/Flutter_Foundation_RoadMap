@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'future_builder_screen.dart';
 import 'stream_counter_screen.dart';
 import 'parallel_async_screen.dart';
+import 'advanced_async_screen.dart';
 
 // =============================================================================
 // 🏠 AsyncHomeScreen — Module Navigation Hub
@@ -57,6 +58,16 @@ class AsyncHomeScreen extends StatelessWidget {
         color: colorScheme.tertiary,
         concepts: const ['Future.wait', 'Parallel', 'Sequential', 'Stopwatch'],
         destination: const ParallelAsyncScreen(),
+      ),
+      _DemoEntry(
+        task: 'Advanced',
+        title: 'Completer & Isolates',
+        subtitle: 'Manual Future control and heavy CPU task offloading to worker '
+            'threads (Isolates).',
+        icon: Icons.psychology_rounded,
+        color: Colors.deepPurple,
+        concepts: const ['Completer', 'Isolates', 'StreamController', 'compute()'],
+        destination: const AdvancedAsyncScreen(),
       ),
     ];
 

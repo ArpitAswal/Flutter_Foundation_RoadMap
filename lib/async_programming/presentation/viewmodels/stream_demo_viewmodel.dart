@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../../core/services/mock_api_service.dart';
+import '../../core/repositories/post_repository.dart';
 
 // =============================================================================
 // 🧠 StreamDemoViewModel — Business Logic for Stream Counter Screen
@@ -41,7 +41,7 @@ class StreamDemoViewModel extends ChangeNotifier {
   // 📦 Dependencies
   // ---------------------------------------------------------------------------
 
-  final MockApiService _apiService;
+  final IPostRepository _repository;
 
   // ---------------------------------------------------------------------------
   // 🔄 State
@@ -79,9 +79,9 @@ class StreamDemoViewModel extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   StreamDemoViewModel({
-    MockApiService? apiService,
+    IPostRepository? repository,
     this.maxCount = 10,
-  }) : _apiService = apiService ?? MockApiService();
+  }) : _repository = repository ?? PostRepository();
 
   // ---------------------------------------------------------------------------
   // 🎮 Public Actions (called by the View)
@@ -97,10 +97,10 @@ class StreamDemoViewModel extends ChangeNotifier {
     _isRunning = true;
     _currentCount = 0;
 
-    // Get a single-subscription stream from the service and convert to broadcast.
+    // Get a single-subscription stream from the repository and convert to broadcast.
     // asBroadcastStream() wraps it in a controller that fans out to N listeners.
-    _activeStream = _apiService
-        .counterStream(maxCount: maxCount)
+    _activeStream = _repository
+        .getCounterStream(maxCount: maxCount)
         .asBroadcastStream();
 
     // The ViewModel subscribes to track state internally.
