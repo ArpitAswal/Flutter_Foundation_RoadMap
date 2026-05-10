@@ -218,3 +218,15 @@ lib/async_programming/
     ├── viewmodels/         ← State & Lifecycle (dispose)
     └── views/              ← UI Consumers
 ```
+
+## App View
+
+<img width="1344" height="2992" alt="Screenshot_20260510_173830" src="https://github.com/user-attachments/assets/22f6e407-2657-4f44-9391-ce801be786a5" />
+
+<img width="1344" height="2992" alt="Screenshot_20260510_173838" src="https://github.com/user-attachments/assets/624d25d5-a507-4fd7-b2d6-3b48cba6b819" />
+
+<img width="1344" height="2992" alt="Screenshot_20260510_173845" src="https://github.com/user-attachments/assets/a39bd5cc-2828-45b3-9bca-2e69043785c9" />
+
+<img width="1344" height="2992" alt="Screenshot_20260510_173856" src="https://github.com/user-attachments/assets/c9ddfce4-e469-44a9-88dd-3a3140983ca7" />
+
+<img width="1344" height="2992" alt="Screenshot_20260510_173911" src="https://github.com/user-attachments/assets/e2270cdc-528a-4b8e-8ff7-d91314c44a90" />
