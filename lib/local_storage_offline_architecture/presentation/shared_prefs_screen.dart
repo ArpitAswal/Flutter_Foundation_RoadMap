@@ -36,18 +36,20 @@ final prefs = await SharedPreferences.getInstance();
     try {
       await _service.init();
       _log("SharedPreferences Initialized!");
-      _readData();
+      _readData(null);
     } catch (e) {
       _log("Error initializing: $e");
     }
   }
 
-  void _readData() {
-    _updateCode('''
+  void _readData(String? s) {
+    if(s != null) {
+      _updateCode('''
 // 2. Read Data synchronously (since it's in memory)
 final token = prefs.getString('token');
 final isDark = prefs.getBool('isDark');
     '''.trim());
+    }
     try {
       setState(() {
         _currentToken = _service.getToken();
@@ -69,7 +71,7 @@ await prefs.setBool('isDark', true);
       await _service.saveToken("user_token_12345");
       await _service.saveThemeMode(true);
       _log("Saved Token and ThemeMode (true).");
-      _readData();
+      _readData(null);
     } catch (e) {
       _log("Error saving data: $e");
     }
@@ -83,7 +85,7 @@ await prefs.remove('token');
     try {
       await _service.deleteToken();
       _log("Deleted Token.");
-      _readData();
+      _readData(null);
     } catch (e) {
       _log("Error deleting token: $e");
     }
@@ -97,7 +99,7 @@ await prefs.clear();
     try {
       await _service.clearAll();
       _log("Cleared all SharedPreferences data.");
-      _readData();
+      _readData(null);
     } catch (e) {
       _log("Error clearing data: $e");
     }
@@ -123,7 +125,7 @@ await prefs.clear();
             children: [
               ElevatedButton(onPressed: _init, child: const Text("Init")),
               ElevatedButton(onPressed: _saveData, child: const Text("Save Data")),
-              ElevatedButton(onPressed: _readData, child: const Text("Read Data")),
+              ElevatedButton(onPressed: ()=> _readData(''), child: const Text("Read Data")),
               ElevatedButton(onPressed: _deleteToken, child: const Text("Delete Token")),
               ElevatedButton(
                 onPressed: _clearAll,

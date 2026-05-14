@@ -34,15 +34,22 @@ class _IsarScreenState extends State<IsarScreen> {
   }
 
   Future<void> _insertMockData() async {
-    _updateCode('''
+    _updateCode(
+      '''
 // 1. Write Data within an ACID transaction
 await isar.writeTxn(() async {
   await isar.isarProducts.put(IsarProduct()..name="Isar Fast");
 });
-    '''.trim());
+    '''
+          .trim(),
+    );
     try {
-      final p1 = IsarProduct()..name = "Isar Fast Laptop"..price = 1500.0;
-      final p2 = IsarProduct()..name = "Isar Cache Drive"..price = 150.0;
+      final p1 = IsarProduct()
+        ..name = "Isar Fast Laptop"
+        ..price = 1500.0;
+      final p2 = IsarProduct()
+        ..name = "Isar Cache Drive"
+        ..price = 150.0;
       await _service.saveProduct(p1);
       await _service.saveProduct(p2);
       _log("Inserted two Isar products transactionally.");
@@ -52,13 +59,16 @@ await isar.writeTxn(() async {
   }
 
   Future<void> _searchData() async {
-    _updateCode('''
+    _updateCode(
+      '''
 // 2. Perform Indexed Query Search
 final results = await isar.isarProducts
   .filter()
   .nameStartsWith("Isar Fast")
   .findAll();
-    '''.trim());
+    '''
+          .trim(),
+    );
     try {
       final results = await _service.searchProducts("Isar Fast");
       _log("Search 'Isar Fast': Found ${results.length} items.");
@@ -68,12 +78,15 @@ final results = await isar.isarProducts
   }
 
   Future<void> _clearAll() async {
-    _updateCode('''
-// 3. Clear all items
+    _updateCode(
+      '''
+// 4. Clear all items
 await isar.writeTxn(() async {
   await isar.isarProducts.clear();
 });
-    '''.trim());
+    '''
+          .trim(),
+    );
     try {
       await _service.clearAll();
       _log("Cleared Isar collection.");
@@ -100,8 +113,14 @@ await isar.writeTxn(() async {
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: [
-              ElevatedButton(onPressed: _insertMockData, child: const Text("Write Transact")),
-              ElevatedButton(onPressed: _searchData, child: const Text("Search 'Isar Fast'")),
+              ElevatedButton(
+                onPressed: _insertMockData,
+                child: const Text("Write Transact"),
+              ),
+              ElevatedButton(
+                onPressed: _searchData,
+                child: const Text("Search 'Isar Fast'"),
+              ),
               ElevatedButton(
                 onPressed: _clearAll,
                 style: ElevatedButton.styleFrom(foregroundColor: Colors.red),
@@ -115,10 +134,14 @@ await isar.writeTxn(() async {
             child: StreamBuilder<List<IsarProduct>>(
               stream: _service.watchAllProducts(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData)
+                  return const Center(child: CircularProgressIndicator());
                 final data = snapshot.data!;
-                if (data.isEmpty) return const Center(child: Text("No items in Isar collection."));
-                
+                if (data.isEmpty)
+                  return const Center(
+                    child: Text("No items in Isar collection."),
+                  );
+
                 return ListView.builder(
                   itemCount: data.length,
                   itemBuilder: (context, index) {
@@ -130,6 +153,16 @@ await isar.writeTxn(() async {
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () async {
+                          _updateCode(
+                            '''
+                            /// 3. Clear DB isar product
+    final isar = await db;
+    await isar.writeTxn(() async {
+      await isar.isarProducts.delete(id);
+    });
+                            '''
+                                .trim(),
+                          );
                           await _service.deleteProduct(item.id);
                           _log("Deleted item ${item.id}");
                         },
@@ -148,11 +181,20 @@ await isar.writeTxn(() async {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Code Snippet:", style: TextStyle(color: Colors.yellow, fontWeight: FontWeight.bold)),
+                const Text(
+                  "Code Snippet:",
+                  style: TextStyle(
+                    color: Colors.yellow,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   _codeSnippet,
-                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ],
             ),
@@ -167,11 +209,14 @@ await isar.writeTxn(() async {
               child: SingleChildScrollView(
                 child: Text(
                   _logs,
-                  style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ),
             ),
-          )
+          ),
         ],
       ),
     );

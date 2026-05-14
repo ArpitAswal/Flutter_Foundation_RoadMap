@@ -133,3 +133,129 @@ When you run this module (`flutter run -t lib/local_storage_offline_architecture
 3. **The Repository Pattern:** Check `offline_first/product_repository.dart` to see a real-world implementation of the Cache-First strategy. It shows how to use Dart Generators (`yield*`) to instantly return cached data, fire off an API call, and then yield the updated data.
 4. **Code Generation:** See how Drift and Isar require `build_runner` to auto-generate schemas and Type Adapters. Look at `drift_database.dart` to see how Table classes are structured before generation.
 5. **Reactive UI Updates:** In `drift_screen.dart` and `isar_screen.dart`, observe how we bind a `StreamBuilder` directly to the database stream. Notice that when we insert or delete data, we *don't* manually call `setState()`—the UI updates automatically because the database pushes the changes through the stream.
+
+---
+
+## 🎯 Part 7: Advanced Interview Round
+
+The following Q&A represents the depth of knowledge expected from a **Senior Flutter Engineer** in a technical interview focused on local persistence and offline architecture.
+
+---
+
+### 🧠 Q1 — SharedPreferences vs Hive
+
+**Interviewer:**
+
+> Why not store product lists in SharedPreferences?
+
+**Strong Answer:**
+
+SharedPreferences is designed for lightweight key-value persistence and **loads its entire dataset into memory** upon initialization.
+
+Large structured datasets such as product lists become:
+- **Inefficient** — the whole file is parsed into RAM every cold start
+- **Difficult to query** — no filtering, sorting, or pagination is possible
+- **Expensive to serialize** — repeatedly converting large JSON strings to/from Dart objects wastes CPU cycles
+
+Hive or SQLite-based solutions are more appropriate for scalable structured persistence.
+
+---
+
+### 🧠 Q2 — Why Repository Layer?
+
+**Interviewer:**
+
+> Why place caching inside the repository instead of the UI?
+
+**Strong Answer:**
+
+Repositories centralize data orchestration between:
+- Remote APIs
+- Local databases
+- In-memory caches
+
+This prevents persistence logic from **leaking into presentation layers**, which would violate the Single Responsibility Principle.
+
+A Repository layer enables:
+- **Offline-first architecture** — the UI doesn't care where data comes from
+- **Testability** — repositories can be mocked independently of the UI
+- **Backend flexibility** — switching from REST to GraphQL only changes the repository, never the UI
+
+---
+
+### 🧠 Q3 — Why DTO Separation Matters Offline?
+
+**Interviewer:**
+
+> Why separate API DTOs from local database entities?
+
+**Strong Answer:**
+
+Backend contracts and local persistence requirements **often evolve independently**.
+
+For example:
+- The API may rename a field (`product_name` → `title`), which should only update the DTO layer
+- The local database may need to add an `isSynced` boolean field that the API knows nothing about
+
+Separating DTOs from domain entities:
+- **Isolates schema changes** — API changes don't cascade into the local DB model
+- **Prevents coupling** — API-specific structures (e.g., `created_at` as a Unix timestamp string) don't leak into business logic
+- **Enables independent versioning** — you can migrate the local DB schema without waiting for the API to update
+
+---
+
+### 🧠 Q4 — Hive vs SQLite
+
+**Interviewer:**
+
+> When would SQLite outperform Hive?
+
+**Strong Answer:**
+
+SQLite is superior when the data is **relational** and requires:
+
+| Capability | SQLite | Hive |
+| :--- | :--- | :--- |
+| JOIN across tables | ✅ | ❌ |
+| Complex WHERE + ORDER BY + LIMIT | ✅ | ❌ |
+| Aggregate functions (COUNT, SUM) | ✅ | ❌ |
+| Index-backed queries | ✅ | ❌ (basic) |
+| Full ACID transactions | ✅ | ❌ |
+| Foreign key constraints | ✅ | ❌ |
+
+**Example:** An order management system that must query *"all orders placed by user X in the last 30 days, grouped by status, ordered by total value"* requires SQLite (or Drift over SQLite). Hive cannot express this query.
+
+Hive is excellent for **simpler object persistence** (caching flat lists, storing user drafts), but it lacks the querying sophistication required in enterprise relational systems.
+
+---
+
+### 🧠 Q5 — Offline-First Architecture
+
+**Interviewer:**
+
+> Why do modern apps prefer offline-first systems?
+
+**Strong Answer:**
+
+Offline-first systems dramatically improve:
+
+1. **Perceived performance** — users see content instantly on cold start because data is already on-device
+2. **Reliability** — the app remains fully functional even when the network is absent or unreliable (flights, tunnels, weak signal)
+3. **User experience** — no blank screens, no loading spinners on every navigation, no data loss during connectivity drops
+4. **Resilience** — partial network failures (timeouts, 500 errors) are gracefully degraded to the local cache
+
+**The Cache-First Pattern (as implemented in this module):**
+
+```
+UI → Repository.getProductsCacheFirst()
+       ↓
+  yield localCache immediately  ←── User sees data in ~0ms
+       ↓
+  fetch from API in background
+       ↓
+  update localCache
+       ↓
+  yield fresh data              ←── UI silently updates
+```
+
+By prioritizing local persistence and background synchronization, applications remain responsive and trustworthy even during complete connectivity loss. This is the architecture used by Spotify (offline playlists), Gmail (offline inbox), and Uber (cached map tiles).
