@@ -111,6 +111,32 @@ await _db.clearProducts();
             ],
           ),
           const Divider(),
+          Container(
+            padding: const EdgeInsets.all(12),
+            width: double.infinity,
+            color: Colors.blueGrey.shade900,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Code Snippet:",
+                  style: TextStyle(
+                    color: Colors.yellow,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _codeSnippet,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
           Expanded(
             flex: 1,
             child: StreamBuilder<List<DriftProduct>>(

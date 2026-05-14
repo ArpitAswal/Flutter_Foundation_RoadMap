@@ -29,6 +29,8 @@ class _SqliteScreenState extends State<SqliteScreen> {
   Future<void> _initDb() async {
     _updateCode('''
 // 1. Open Database and Create Table
+final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'app_database.db');
 _database = await openDatabase(path, version: 1, 
   onCreate: (db, version) async {
     await db.execute(
@@ -40,19 +42,21 @@ _database = await openDatabase(path, version: 1,
     try {
       await _service.initDatabase();
       _log("SQLite DB Initialized & Opened.");
-      _readData();
+      _readData(null);
     } catch (e) {
       _log("Error init DB: $e");
     }
   }
 
-  Future<void> _readData() async {
-    _updateCode('''
+  Future<void> _readData(String? msg) async {
+    if(msg != null) {
+      _updateCode('''
 // 2. Read all data using raw SQL query
 final data = await _database!.rawQuery(
   'SELECT * FROM products ORDER BY price DESC'
 );
     '''.trim());
+    }
     try {
       final data = await _service.getAllProducts();
       setState(() {
@@ -78,7 +82,7 @@ await _database!.insert(
       await _service.insertProduct("2", "Monitor", 300.0);
       await _service.insertProduct("3", "USB Cable", 10.0);
       _log("Inserted Keyboard, Monitor, Cable via SQL.");
-      _readData();
+      _readData(null);
     } catch (e) {
       _log("Error inserting: $e");
     }
@@ -140,7 +144,7 @@ await deleteDatabase(path);
             children: [
               ElevatedButton(onPressed: _initDb, child: const Text("Init DB")),
               ElevatedButton(onPressed: _insertMockData, child: const Text("Insert Data")),
-              ElevatedButton(onPressed: _readData, child: const Text("Read All")),
+              ElevatedButton(onPressed: ()=> _readData(''), child: const Text("Read All")),
               ElevatedButton(onPressed: _searchExpensive, child: const Text("Filter > \$100")),
               ElevatedButton(
                 onPressed: _destroyDb,
