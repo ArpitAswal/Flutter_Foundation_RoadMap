@@ -19,6 +19,7 @@ import 'drift_screen.dart';
 import 'isar_screen.dart';
 import 'secure_storage_screen.dart';
 import '../offline_first/offline_first_screen.dart';
+import 'real_world_demo_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -240,7 +241,41 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 24),
 
           // ───────────────────────────────────────────────────────────────────
-          // Step 6: Architecture Summary Banner
+          // Step 6: Section Header — Part 4: Real-World Integration Demo
+          // This screen shows ALL six storage strategies working together
+          // inside a single simulated e-commerce app, clearly demonstrating
+          // WHICH technology fits WHICH use-case in production.
+          // ───────────────────────────────────────────────────────────────────
+          _buildSectionHeader(
+              'Part 4: Real-World Integration Demo', colorScheme),
+          const SizedBox(height: 10),
+
+          // Real-World Demo Card
+          // ─────────────────────────────────────────────────────────────────
+          // REAL-WORLD USE: This screen unifies all 6 storage techniques into
+          // a single tabbed app — Login (SecureStorage), Settings (SharedPrefs),
+          // Cart (Hive), News (Isar), Orders (SQLite), Tasks (Drift) — showing
+          // the RIGHT tool for each specific feature in a production app.
+          //
+          // DB FEATURE USED: All 6 libraries working concurrently in one screen.
+          // Each tab is an isolated feature that demonstrates the exact DB API.
+          // ─────────────────────────────────────────────────────────────────
+          _buildMenuCard(
+            context,
+            title: 'Real-World Integration Demo',
+            subtitle:
+                '6 tabs · 6 storage strategies · one production-style app.',
+            icon: Icons.hub_outlined,
+            dbFeature:
+                '🏗 SecureStorage · SharedPrefs · Hive · Isar · SQLite · Drift',
+            realWorldUse:
+                'Login JWT · Settings · Cart · News · Orders · Task manager',
+            destination: const RealWorldDemoScreen(),
+            featureColor: Colors.deepPurple.shade700,
+          ),
+
+          const SizedBox(height: 24),
+
           // This footer card maps each storage technique to its role in a
           // real production app's data layer. This is the mental model
           // every senior Flutter engineer must internalize.
